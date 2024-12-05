@@ -2,10 +2,16 @@ import * as vscode from "vscode";
 
 // Definição das abreviações e seus hooks correspondentes
 const HOOK_ABBREVIATIONS = {
-  ust: "useState", // ou ust
+  ust: "useState",
   uef: "useEffect",
   ucb: "useCallback",
   urf: "useRef",
+
+  urd: "useReducer",
+  uct: "useContext",
+  umo: "useMemo",
+  uid: "useId",
+  uts: "useTransition",
 };
 
 async function checkAndAddImport(editor: vscode.TextEditor, hooks: string[]) {
@@ -74,11 +80,32 @@ async function insertHookSnippet(
       break;
     case "useCallback":
       snippet = new vscode.SnippetString(
-        "const ${1:memoizedCallback} = useCallback(\n\t(${2:params}) => {\n\t\t${3:// função}\n\t},\n\t[${0}]\n)"
+        "useCallback((${2:params}) => {\n\t\t${3:}\n\t}, [${0}])"
       );
       break;
     case "useRef":
       snippet = new vscode.SnippetString("const ${1:ref} = useRef(${0})");
+      break;
+    case "useReducer":
+      snippet = new vscode.SnippetString(
+        "const [${1:state}, ${2:dispatch}] = useReducer(${3:reducer}, ${4:initialState}${0})"
+      );
+      break;
+    case "useContext":
+      snippet = new vscode.SnippetString("const ${1:value} = useContext(${0})");
+      break;
+    case "useMemo":
+      snippet = new vscode.SnippetString(
+        "useMemo(() => {\n\t${1:}\n\treturn ${2:value};\n}, [${0}])"
+      );
+      break;
+    case "useId":
+      snippet = new vscode.SnippetString("const ${1:id} = useId(${0})");
+      break;
+    case "useTransition":
+      snippet = new vscode.SnippetString(
+        "const [${1:isPending}, ${2:startTransition}] = useTransition(${0})"
+      );
       break;
     default:
       return;
@@ -106,7 +133,8 @@ export function activate(context: vscode.ExtensionContext) {
               createCompletionItem(
                 "useState",
                 "React useState hook",
-                triggerPosition
+                triggerPosition,
+                vscode.CompletionItemKind.Constant // Usando ícone de raio
               )
             );
           }
@@ -115,7 +143,8 @@ export function activate(context: vscode.ExtensionContext) {
               createCompletionItem(
                 "useEffect",
                 "React useEffect hook",
-                triggerPosition
+                triggerPosition,
+                vscode.CompletionItemKind.Event
               )
             );
           }
@@ -124,7 +153,8 @@ export function activate(context: vscode.ExtensionContext) {
               createCompletionItem(
                 "useCallback",
                 "React useCallback hook",
-                triggerPosition
+                triggerPosition,
+                vscode.CompletionItemKind.Event
               )
             );
           }
@@ -135,7 +165,8 @@ export function activate(context: vscode.ExtensionContext) {
               const item = createCompletionItem(
                 hook,
                 `React ${hook} hook (${abbr})`,
-                triggerPosition
+                triggerPosition,
+                vscode.CompletionItemKind.Event
               );
               item.filterText = abbr;
               completionItems.push(item);
@@ -150,12 +181,10 @@ export function activate(context: vscode.ExtensionContext) {
   function createCompletionItem(
     hook: string,
     detail: string,
-    triggerPosition: vscode.Position
+    triggerPosition: vscode.Position,
+    kind: vscode.CompletionItemKind = vscode.CompletionItemKind.Snippet
   ): vscode.CompletionItem {
-    const item = new vscode.CompletionItem(
-      hook,
-      vscode.CompletionItemKind.Snippet
-    );
+    const item = new vscode.CompletionItem(hook, kind);
     item.detail = detail;
     item.command = {
       command: "react-ninja-snippets.insertHook",
@@ -180,12 +209,6 @@ export function activate(context: vscode.ExtensionContext) {
     fullNameAndAbbreviationProvider,
     insertHookCommand
   );
-
-  vscode.window.showInformationMessage(
-    "React Ninja Snippets ativado com sucesso!"
-  );
 }
 
-export function deactivate() {
-  vscode.window.showInformationMessage("React Ninja Snippets desativado.");
-}
+export function deactivate() {}
