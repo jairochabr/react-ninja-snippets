@@ -1,12 +1,10 @@
 import * as vscode from "vscode";
 
-// Definição das abreviações e seus hooks correspondentes
 const HOOK_ABBREVIATIONS = {
   ust: "useState",
   uef: "useEffect",
   ucb: "useCallback",
   urf: "useRef",
-
   urd: "useReducer",
   uct: "useContext",
   umo: "useMemo",
@@ -26,7 +24,9 @@ async function checkAndAddImport(editor: vscode.TextEditor, hooks: string[]) {
     existingImports = importMatch[1].split(",").map((hook) => hook.trim());
 
     const newHooks = hooks.filter((hook) => !existingImports.includes(hook));
-    if (newHooks.length === 0) return;
+    if (newHooks.length === 0) {
+      return null;
+    }
 
     await editor.edit((editBuilder) => {
       const oldImport = importMatch[0];
@@ -56,16 +56,13 @@ async function insertHookSnippet(
   hookType: string,
   triggerStartPosition: vscode.Position
 ) {
-  // Remove o texto trigger
   const position = editor.selection.active;
   await editor.edit((editBuilder) => {
     editBuilder.delete(new vscode.Range(triggerStartPosition, position));
   });
 
-  // Adiciona o import apropriado
   await checkAndAddImport(editor, [hookType]);
 
-  // Insere o snippet apropriado
   let snippet: vscode.SnippetString;
   switch (hookType) {
     case "useState":
@@ -75,12 +72,12 @@ async function insertHookSnippet(
       break;
     case "useEffect":
       snippet = new vscode.SnippetString(
-        "useEffect(() => {\n\t${1:// efeito}\n\treturn () => {\n\t\t${2:// cleanup}\n\t}\n}, [${0}])"
+        "useEffect(() => {\n\t${1:}\n}, [${0}])"
       );
       break;
     case "useCallback":
       snippet = new vscode.SnippetString(
-        "useCallback((${2:params}) => {\n\t\t${3:}\n\t}, [${0}])"
+        "useCallback((${1:params}) => {\n\t${2:}\n}, [${0}])"
       );
       break;
     case "useRef":
@@ -88,7 +85,7 @@ async function insertHookSnippet(
       break;
     case "useReducer":
       snippet = new vscode.SnippetString(
-        "const [${1:state}, ${2:dispatch}] = useReducer(${3:reducer}, ${4:initialState}${0})"
+        "const [${1:state}, ${2:dispatch}] = useReducer(${0})"
       );
       break;
     case "useContext":
@@ -96,7 +93,7 @@ async function insertHookSnippet(
       break;
     case "useMemo":
       snippet = new vscode.SnippetString(
-        "useMemo(() => {\n\t${1:}\n\treturn ${2:value};\n}, [${0}])"
+        "useMemo(() => {\n\t${1:}\n}, [${0}])"
       );
       break;
     case "useId":
@@ -115,100 +112,66 @@ async function insertHookSnippet(
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  // Provider para nomes completos e abreviações
-  const fullNameAndAbbreviationProvider =
-    vscode.languages.registerCompletionItemProvider(
-      ["typescript", "typescriptreact", "javascript", "javascriptreact"],
-      {
-        provideCompletionItems(document, position) {
-          const wordRange = document.getWordRangeAtPosition(position);
-          const word = wordRange ? document.getText(wordRange) : "";
-          const triggerPosition = wordRange ? wordRange.start : position;
+  const abbreviationProvider = vscode.languages.registerCompletionItemProvider(
+    ["typescript", "typescriptreact", "javascript", "javascriptreact"],
+    {
+      provideCompletionItems(document, position) {
+        const wordRange = document.getWordRangeAtPosition(position);
+        const word = wordRange ? document.getText(wordRange) : "";
+        const triggerPosition = wordRange ? wordRange.start : position;
 
-          const completionItems: vscode.CompletionItem[] = [];
+        const completionItems: vscode.CompletionItem[] = [];
 
-          // Adiciona completions para nomes completos
-          if ("useState".startsWith(word)) {
-            completionItems.push(
-              createCompletionItem(
-                "useState",
-                "React useState hook",
-                triggerPosition,
-                vscode.CompletionItemKind.Constant // Usando ícone de raio
-              )
+        Object.entries(HOOK_ABBREVIATIONS).forEach(([abbr, hook]) => {
+          if (abbr.startsWith(word)) {
+            const item = new vscode.CompletionItem(
+              abbr,
+              vscode.CompletionItemKind.Snippet
             );
-          }
-          if ("useEffect".startsWith(word)) {
-            completionItems.push(
-              createCompletionItem(
-                "useEffect",
-                "React useEffect hook",
-                triggerPosition,
-                vscode.CompletionItemKind.Event
-              )
-            );
-          }
-          if ("useCallback".startsWith(word)) {
-            completionItems.push(
-              createCompletionItem(
-                "useCallback",
-                "React useCallback hook",
-                triggerPosition,
-                vscode.CompletionItemKind.Event
-              )
-            );
-          }
 
-          // Adiciona completions para abreviações
-          Object.entries(HOOK_ABBREVIATIONS).forEach(([abbr, hook]) => {
-            if (abbr.startsWith(word)) {
-              const item = createCompletionItem(
-                hook,
-                `React ${hook} hook (${abbr})`,
-                triggerPosition,
-                vscode.CompletionItemKind.Event
+            // Add the full hook name to the detail field instead
+            item.detail = `→ ${hook} (React Ninja Snippets)`;
+
+            // Add detailed documentation
+            item.documentation = new vscode.MarkdownString()
+              .appendMarkdown(`**React Ninja Snippets**\n\n`)
+              .appendMarkdown(`Fast import for \`${hook}\` from 'react'\n\n`)
+              .appendMarkdown(
+                `\`\`\`typescript\nimport { ${hook} } from 'react';\n\`\`\``
               );
-              item.filterText = abbr;
-              completionItems.push(item);
-            }
-          });
 
-          return completionItems;
-        },
-      }
-    );
+            item.insertText = hook;
+            item.filterText = abbr;
+            item.sortText = `0_${abbr}`; // Ensures our snippets appear at the top
 
-  function createCompletionItem(
-    hook: string,
-    detail: string,
-    triggerPosition: vscode.Position,
-    kind: vscode.CompletionItemKind = vscode.CompletionItemKind.Snippet
-  ): vscode.CompletionItem {
-    const item = new vscode.CompletionItem(hook, kind);
-    item.detail = detail;
-    item.command = {
-      command: "react-ninja-snippets.insertHook",
-      title: `Insert ${hook}`,
-      arguments: [hook, triggerPosition],
-    };
-    return item;
-  }
+            item.command = {
+              command: "react-hook-abbreviations.insertHook",
+              title: `Insert ${hook}`,
+              arguments: [hook, triggerPosition],
+            };
 
-  // Comando para inserir o hook
+            completionItems.push(item);
+          }
+        });
+
+        return completionItems;
+      },
+    }
+  );
+
   const insertHookCommand = vscode.commands.registerCommand(
-    "react-ninja-snippets.insertHook",
+    "react-hook-abbreviations.insertHook",
     async (hook: string, triggerPosition: vscode.Position) => {
       const editor = vscode.window.activeTextEditor;
-      if (!editor) return;
+      if (!editor) {
+        return null;
+      }
 
       await insertHookSnippet(editor, hook, triggerPosition);
     }
   );
 
-  context.subscriptions.push(
-    fullNameAndAbbreviationProvider,
-    insertHookCommand
-  );
+  context.subscriptions.push(abbreviationProvider, insertHookCommand);
 }
 
 export function deactivate() {}
