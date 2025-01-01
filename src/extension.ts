@@ -12,21 +12,87 @@ const SNIPPETS = {
   umo: "useMemo",
   uid: "useId",
   uts: "useTransition",
-  // React Component
-  rfc: "ReactFunctionComponent",
-  // rcd: ,
-  // rcb: ,
-  // rac: ,
+  // React Components
+  rfca: "ReactFunctionArrow",
+  rfc: "ReactFunctionExport",
+  rfcd: "ReactFunctionExportDefault",
+  rfce: "ReactExportArrow",
 };
+
+type ComponentType =
+  | "arrow"
+  | "function"
+  | "functionExportDefault"
+  | "exportArrow";
 
 function getComponentNameFromFile(document: vscode.TextDocument): string {
   const fileName = path.basename(document.fileName);
-  const nameWithoutExtension = fileName.replace(/\.(tsx|jsx|ts|js)$/, '');
-  
+  const nameWithoutExtension = fileName.replace(/\.(tsx|jsx|ts|js)$/, "");
+
   return nameWithoutExtension
     .split(/[-_.]/)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join('');
+    .join("");
+}
+
+async function insertComponentSnippet(
+  editor: vscode.TextEditor,
+  triggerStartPosition: vscode.Position,
+  type: ComponentType
+) {
+  const componentName = getComponentNameFromFile(editor.document);
+  const position = editor.selection.active;
+
+  await editor.edit((editBuilder) => {
+    editBuilder.delete(new vscode.Range(triggerStartPosition, position));
+  });
+
+  let snippet: vscode.SnippetString;
+
+  switch (type) {
+    case "arrow":
+      snippet = new vscode.SnippetString(
+        `const ${componentName} = () => {\n` +
+          `\treturn (\n` +
+          "\t\t${0}\n" +
+          `\t)\n` +
+          `}\n\n` +
+          `export default ${componentName}`
+      );
+      break;
+
+    case "function":
+      snippet = new vscode.SnippetString(
+        `export function ${componentName}() {\n` +
+          `\treturn (\n` +
+          "\t\t${0}\n" +
+          `\t)\n` +
+          `}`
+      );
+      break;
+
+    case "functionExportDefault":
+      snippet = new vscode.SnippetString(
+        `export default function ${componentName}() {\n` +
+          `\treturn (\n` +
+          "\t\t${0}\n" +
+          `\t)\n` +
+          `}`
+      );
+      break;
+
+    case "exportArrow":
+      snippet = new vscode.SnippetString(
+        `export const ${componentName} = () => {\n` +
+          `\treturn (\n` +
+          "\t\t${0}\n" +
+          `\t)\n` +
+          `}`
+      );
+      break;
+  }
+
+  await editor.insertSnippet(snippet);
 }
 
 async function checkAndAddImport(editor: vscode.TextEditor, hooks: string[]) {
@@ -66,29 +132,6 @@ async function checkAndAddImport(editor: vscode.TextEditor, hooks: string[]) {
       editBuilder.insert(new vscode.Position(0, 0), importText);
     });
   }
-}
-
-async function insertComponentSnippet(
-  editor: vscode.TextEditor,
-  triggerStartPosition: vscode.Position
-) {
-  const componentName = getComponentNameFromFile(editor.document);
-  const position = editor.selection.active;
-  
-  await editor.edit((editBuilder) => {
-    editBuilder.delete(new vscode.Range(triggerStartPosition, position));
-  });
-
-  const snippet = new vscode.SnippetString(
-    `const ${componentName} = () => {\n` +
-    `\treturn (\n` +
-    '\t\t${0}\n' +
-    `\t)\n` +
-    `}\n\n` +
-    `export default ${componentName}`
-  );
-
-  await editor.insertSnippet(snippet);
 }
 
 async function insertHookSnippet(
@@ -151,70 +194,140 @@ async function insertHookSnippet(
   await editor.insertSnippet(snippet);
 }
 
+function getSnippetPreview(snippet: string, componentName: string): string {
+  switch (snippet) {
+    case "ReactFunctionArrow":
+      return [
+        `const ${componentName} = () => {`,
+        "  return (",
+        "  )",
+        "}",
+        "",
+        `export default ${componentName}`,
+      ].join("\n");
+
+    case "ReactFunctionExport":
+      return [
+        `export function ${componentName}() {`,
+        "  return (",
+        "  )",
+        "}",
+      ].join("\n");
+
+    case "ReactFunctionExportDefault":
+      return [
+        `export default function ${componentName}() {`,
+        "  return (",
+        "  )",
+        "}",
+      ].join("\n");
+
+    case "ReactFunctionOnly":
+      return [
+        `function ${componentName}() {`,
+        "  return (",
+        "  )",
+        "}",
+        "",
+        `export default ${componentName}`,
+      ].join("\n");
+
+    case "ReactExportArrow":
+      return [
+        `export const ${componentName} = () => {`,
+        "  return (",
+        "  )",
+        "}",
+      ].join("\n");
+
+    default:
+      return "";
+  }
+}
+
+function getComponentType(snippet: string): ComponentType {
+  switch (snippet) {
+    case "ReactFunctionArrow":
+      return "arrow";
+    case "ReactFunctionExport":
+      return "function";
+    case "ReactFunctionExportDefault":
+      return "functionExportDefault";
+    case "ReactExportArrow":
+      return "exportArrow";
+    default:
+      return "arrow";
+  }
+}
+
+function provideCompletionItems(
+  document: vscode.TextDocument,
+  position: vscode.Position
+) {
+  const wordRange = document.getWordRangeAtPosition(position);
+  const word = wordRange ? document.getText(wordRange) : "";
+  const triggerPosition = wordRange ? wordRange.start : position;
+
+  const completionItems: vscode.CompletionItem[] = [];
+
+  Object.entries(SNIPPETS).forEach(([abbr, snippet]) => {
+    if (abbr.startsWith(word)) {
+      const item = new vscode.CompletionItem(
+        abbr,
+        vscode.CompletionItemKind.Snippet
+      );
+
+      item.detail = `→ ${snippet} (React Ninja Snippets)`;
+      item.documentation = new vscode.MarkdownString().appendMarkdown(
+        `**React Ninja Snippets**\n\n`
+      );
+
+      if (snippet.startsWith("React")) {
+        const componentName = getComponentNameFromFile(document);
+        const preview = getSnippetPreview(snippet, componentName);
+
+        item.documentation
+          .appendMarkdown(
+            `Creates a React Component named '${componentName}'\n\n`
+          )
+          .appendMarkdown("```typescript\n")
+          .appendMarkdown(preview)
+          .appendMarkdown("\n```");
+
+        item.command = {
+          command: "react-ninja-snippets.insertComponent",
+          title: "Insert React Component",
+          arguments: [triggerPosition, getComponentType(snippet)],
+        };
+      } else {
+        item.documentation
+          .appendMarkdown(`Fast import for \`${snippet}\` from 'react'\n\n`)
+          .appendMarkdown(
+            `\`\`\`typescript\nimport { ${snippet} } from 'react';\n\`\`\``
+          );
+
+        item.command = {
+          command: "react-ninja-snippets.insertHook",
+          title: `Insert ${snippet}`,
+          arguments: [snippet, triggerPosition],
+        };
+      }
+
+      item.insertText = snippet;
+      item.filterText = abbr;
+      item.sortText = `0_${abbr}`;
+
+      completionItems.push(item);
+    }
+  });
+
+  return completionItems;
+}
+
 export function activate(context: vscode.ExtensionContext) {
   const abbreviationProvider = vscode.languages.registerCompletionItemProvider(
     ["typescript", "typescriptreact", "javascript", "javascriptreact"],
-    {
-      provideCompletionItems(document, position) {
-        const wordRange = document.getWordRangeAtPosition(position);
-        const word = wordRange ? document.getText(wordRange) : "";
-        const triggerPosition = wordRange ? wordRange.start : position;
-
-        const completionItems: vscode.CompletionItem[] = [];
-
-        Object.entries(SNIPPETS).forEach(([abbr, snippet]) => {
-          if (abbr.startsWith(word)) {
-            const item = new vscode.CompletionItem(
-              abbr,
-              vscode.CompletionItemKind.Snippet
-            );
-
-            item.detail = `→ ${snippet} (React Ninja Snippets)`;
-            item.documentation = new vscode.MarkdownString()
-              .appendMarkdown(`**React Ninja Snippets**\n\n`);
-
-            if (snippet === "ReactFunctionComponent") {
-              const componentName = getComponentNameFromFile(document);
-              item.documentation
-                .appendMarkdown(`Creates a React Function Component named '${componentName}'\n\n`)
-                .appendMarkdown("```typescript\n")
-                .appendMarkdown(`const ${componentName} = () => {\n`)
-                .appendMarkdown("  return (\n")
-                .appendMarkdown("  )\n")
-                .appendMarkdown("}\n\n")
-                .appendMarkdown(`export default ${componentName}\n`)
-                .appendMarkdown("```");
-
-              item.command = {
-                command: "react-ninja-snippets.insertComponent",
-                title: "Insert React Component",
-                arguments: [triggerPosition],
-              };
-            } else {
-              item.documentation
-                .appendMarkdown(`Fast import for \`${snippet}\` from 'react'\n\n`)
-                .appendMarkdown(
-                  `\`\`\`typescript\nimport { ${snippet} } from 'react';\n\`\`\``
-                );
-
-              item.command = {
-                command: "react-ninja-snippets.insertHook",
-                title: `Insert ${snippet}`,
-                arguments: [snippet, triggerPosition],
-              };
-            }
-
-            item.insertText = snippet;
-            item.filterText = abbr;
-            item.sortText = `0_${abbr}`;
-
-            completionItems.push(item);
-          }
-        });
-
-        return completionItems;
-      },
-    }
+    { provideCompletionItems }
   );
 
   const insertHookCommand = vscode.commands.registerCommand(
@@ -224,20 +337,18 @@ export function activate(context: vscode.ExtensionContext) {
       if (!editor) {
         return null;
       }
-
       await insertHookSnippet(editor, hook, triggerPosition);
     }
   );
 
   const insertComponentCommand = vscode.commands.registerCommand(
     "react-ninja-snippets.insertComponent",
-    async (triggerPosition: vscode.Position) => {
+    async (triggerPosition: vscode.Position, type: ComponentType) => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
         return null;
       }
-
-      await insertComponentSnippet(editor, triggerPosition);
+      await insertComponentSnippet(editor, triggerPosition, type);
     }
   );
 
