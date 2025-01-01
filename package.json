@@ -1,11 +1,25 @@
 {
   "name": "react-ninja-snippets",
   "displayName": "React Ninja Snippets",
-  "description": "🥷 ...",
-  "version": "0.0.1",
+  "description": "Snippets for React.js: Write code like a real ninja! 🥷",
+  "version": "0.0.3",
+  "icon": "./media/logo.png",
   "publisher": "jairochabr",
   "engines": {
     "vscode": "^1.51.0"
+  },
+  "author": {
+    "name": "Jairo Rocha",
+    "url": "https://www.linkedin.com/in/jairochabr/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jairochabr/react-ninja-snippets.git"
+  },
+  "homepage": "https://github.com/jairochabr/react-ninja-snippets",
+  "galleryBanner": {
+    "color": "#2C2C32",
+    "theme": "dark"
   },
   "categories": [
     "Snippets"
