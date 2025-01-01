@@ -2,7 +2,7 @@
   "name": "react-ninja-snippets",
   "displayName": "React Ninja Snippets",
   "description": "Snippets for React.js: Write code like a real ninja! 🥷",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "icon": "./media/logo.png",
   "publisher": "jairochabr",
   "engines": {
